@@ -6,6 +6,7 @@ import { TARGET_GALLERY_ID } from "../src/types/dc.js";
 function makeClient(): DcClient {
   return {
     listRecent: vi.fn(),
+    listRecommended: vi.fn(),
     searchGallery: vi.fn(),
     getPost: vi.fn(async () => ({
       id: `${TARGET_GALLERY_ID}:123`,

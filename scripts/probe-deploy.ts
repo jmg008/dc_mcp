@@ -4,7 +4,7 @@ import type { FetchDocument, SearchDocument } from "../src/types/mcp.js";
 
 const TARGET_GALLERY_ID = "thesingularity";
 const probeOrigin = process.env.MCP_ALLOWED_ORIGIN?.trim() || "https://chat.openai.com";
-const probeQuery = process.env.MCP_PROBE_QUERY?.trim() || "gpt";
+const probeHours = parsePositiveInt(process.env.MCP_PROBE_HOURS, 24);
 const explicitFetchId = process.env.MCP_FETCH_ID?.trim() || null;
 const maxAttempts = parsePositiveInt(process.env.MCP_PROBE_ATTEMPTS, 3);
 const retryDelayMs = parsePositiveInt(process.env.MCP_PROBE_RETRY_DELAY_MS, 2_000);
@@ -80,38 +80,24 @@ async function verifyMcpRoundTrip(url: URL): Promise<void> {
 
     const recent = await client.callTool({
       name: "search",
-      arguments: { query: "" },
+      arguments: { hours: probeHours },
     });
-    assert(!recent.isError, "Recent search returned an error.");
+    assert(!recent.isError, "Recommended-post search returned an error.");
 
     const recentStructured = recent.structuredContent as
-      | { results?: SearchDocument[]; galleryId?: string }
+      | { results?: SearchDocument[]; galleryId?: string; hours?: number; mode?: string }
       | undefined;
     const recentResults = recentStructured?.results ?? [];
-    assert(recentStructured?.galleryId === TARGET_GALLERY_ID, "Recent search galleryId mismatch.");
-    assert(recentResults.length > 0, "Recent search returned no results.");
+    assert(recentStructured?.galleryId === TARGET_GALLERY_ID, "Recommended search galleryId mismatch.");
+    assert(recentStructured?.mode === "recommend", "Search mode must be recommend.");
+    assert(recentStructured?.hours === probeHours, `Search hours must equal ${probeHours}.`);
+    assert(recentResults.length > 0, "Recommended search returned no results.");
     assert(
       recentResults.every((item) => item.galleryId === TARGET_GALLERY_ID && item.id.startsWith(`${TARGET_GALLERY_ID}:`)),
-      "Recent search returned a post outside thesingularity.",
+      "Recommended search returned a post outside thesingularity.",
     );
 
-    const querySearch = await client.callTool({
-      name: "search",
-      arguments: { query: probeQuery },
-    });
-    assert(!querySearch.isError, `search(${JSON.stringify(probeQuery)}) returned an error.`);
-
-    const queryStructured = querySearch.structuredContent as
-      | { results?: SearchDocument[]; galleryId?: string }
-      | undefined;
-    const queryResults = queryStructured?.results ?? [];
-    assert(queryStructured?.galleryId === TARGET_GALLERY_ID, "Query search galleryId mismatch.");
-    assert(
-      queryResults.every((item) => item.galleryId === TARGET_GALLERY_ID && item.id.startsWith(`${TARGET_GALLERY_ID}:`)),
-      `search(${JSON.stringify(probeQuery)}) returned a post outside thesingularity.`,
-    );
-
-    const fetchId = explicitFetchId ?? queryResults[0]?.id ?? recentResults[0]?.id ?? null;
+    const fetchId = explicitFetchId ?? recentResults[0]?.id ?? null;
     assert(fetchId !== null, "No post id was available for fetch verification.");
 
     const fetched = await client.callTool({
@@ -136,9 +122,8 @@ async function verifyMcpRoundTrip(url: URL): Promise<void> {
           mcpUrl: url.toString(),
           healthUrl: healthUrl.toString(),
           allowedOrigin: probeOrigin,
-          query: probeQuery,
+          hours: probeHours,
           recentCount: recentResults.length,
-          queryCount: queryResults.length,
           fetched: {
             id: document.id,
             title: document.title,

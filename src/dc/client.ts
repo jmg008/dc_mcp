@@ -25,6 +25,7 @@ interface HttpTextResponse {
 
 export interface DcClient {
   listRecent: (page: number) => Promise<DcListItem[]>;
+  listRecommended: (page: number) => Promise<DcListItem[]>;
   searchGallery: (query: string) => Promise<DcListItem[]>;
   getPost: (postNo: string) => Promise<DcPost>;
 }
@@ -77,6 +78,7 @@ class Semaphore {
 
 class DcClientImpl implements DcClient {
   private readonly recentCache = new Map<number, CacheEntry<DcListItem[]>>();
+  private readonly recommendedCache = new Map<number, CacheEntry<DcListItem[]>>();
   private readonly postCache = new Map<string, CacheEntry<DcPost>>();
   private readonly semaphore: Semaphore;
   private readonly recentCacheTtlMs: number;
@@ -101,6 +103,7 @@ class DcClientImpl implements DcClient {
     const response = await this.fetchText(
       `https://gall.dcinside.com/mgallery/board/lists/?id=${TARGET_GALLERY_ID}&page=${safePage}`,
       "listRecent.page",
+      { page: safePage },
     );
 
     const normalized = normalizeRecentResults(response.data);
@@ -108,10 +111,27 @@ class DcClientImpl implements DcClient {
     return normalized;
   }
 
+  public async listRecommended(page: number): Promise<DcListItem[]> {
+    const safePage = Number.isFinite(page) && page > 0 ? Math.floor(page) : 1;
+    const cached = this.readFromCache(this.recommendedCache, safePage);
+    if (cached) {
+      return cached;
+    }
+
+    const response = await this.fetchText(buildRecommendedListUrl(safePage), "listRecommended.page", {
+      page: safePage,
+    });
+
+    const normalized = normalizeRecentResults(response.data);
+    this.writeToCache(this.recommendedCache, safePage, normalized, this.recentCacheTtlMs);
+    return normalized;
+  }
+
   public async searchGallery(query: string): Promise<DcListItem[]> {
     const response = await this.fetchText(
       `https://m.dcinside.com/search/gall_content?keyword=${encodeURIComponent(query)}&page=1`,
       "search.page",
+      { query },
     );
 
     return normalizeSearchResults(response.data);
@@ -123,7 +143,7 @@ class DcClientImpl implements DcClient {
       return cached;
     }
 
-    const pageResponse = await this.fetchText(buildDesktopPostUrl(postNo), "post.page");
+    const pageResponse = await this.fetchText(buildDesktopPostUrl(postNo), "post.page", { postNo });
     const parsedPage = normalizePostPage(pageResponse.data, postNo, TARGET_GALLERY_ID);
 
     const commentResponse = await this.fetchComments(postNo, parsedPage.commentRequestState, pageResponse.headers);
@@ -148,7 +168,11 @@ class DcClientImpl implements DcClient {
     return post;
   }
 
-  private async fetchText(url: string, operation: string): Promise<HttpTextResponse> {
+  private async fetchText(
+    url: string,
+    operation: string,
+    metadata: Record<string, unknown> = {},
+  ): Promise<HttpTextResponse> {
     return this.callWithPolicy(operation, async () => {
       const response = await this.client.session.get<string>(url, {
         headers: {
@@ -158,7 +182,7 @@ class DcClientImpl implements DcClient {
         responseType: "text",
       });
       return response;
-    });
+    }, metadata);
   }
 
   private async fetchComments(
@@ -189,10 +213,14 @@ class DcClientImpl implements DcClient {
       );
 
       return response.data;
-    });
+    }, { postNo });
   }
 
-  private async callWithPolicy<T>(operation: string, work: () => Promise<T>): Promise<T> {
+  private async callWithPolicy<T>(
+    operation: string,
+    work: () => Promise<T>,
+    metadata: Record<string, unknown> = {},
+  ): Promise<T> {
     const startedAt = Date.now();
     return this.semaphore.use(async () => {
       try {
@@ -205,6 +233,7 @@ class DcClientImpl implements DcClient {
           ...getRequestContext(),
           operation,
           galleryId: TARGET_GALLERY_ID,
+          ...metadata,
           latencyMs: Date.now() - startedAt,
         });
 
@@ -214,6 +243,7 @@ class DcClientImpl implements DcClient {
           ...getRequestContext(),
           operation,
           galleryId: TARGET_GALLERY_ID,
+          ...metadata,
           latencyMs: Date.now() - startedAt,
           error: toErrorMessage(error),
         });
@@ -254,6 +284,10 @@ class DcClientImpl implements DcClient {
 
 function buildGalleryListUrl(): string {
   return `https://gall.dcinside.com/mgallery/board/lists/?id=${TARGET_GALLERY_ID}`;
+}
+
+function buildRecommendedListUrl(page: number): string {
+  return `https://gall.dcinside.com/mgallery/board/lists/?id=${TARGET_GALLERY_ID}&exception_mode=recommend&page=${page}`;
 }
 
 function buildDesktopPostUrl(postNo: string): string {

@@ -19,16 +19,18 @@ function makeClient(): DcClient {
         raw: {},
       },
     ]),
-    searchGallery: vi.fn(async () => [
+    listRecommended: vi.fn(async () => [
       {
         id: `${TARGET_GALLERY_ID}:101`,
         postNo: "101",
         galleryId: TARGET_GALLERY_ID,
-        title: "Search result",
+        title: "Recommended result",
         url: "https://gall.dcinside.com/mgallery/board/view/?id=thesingularity&no=101",
+        createdAt: "2099-01-01 12:00:00",
         raw: {},
       },
     ]),
+    searchGallery: vi.fn(async () => []),
     getPost: vi.fn(async (postNo: string) => ({
       id: `${TARGET_GALLERY_ID}:${postNo}`,
       postNo,
@@ -115,16 +117,16 @@ describe("http app", () => {
 
     const search = await client.callTool({
       name: "search",
-      arguments: { query: "" },
+      arguments: { hours: 24 },
     });
     expect(search.content[0]).toMatchObject({
       type: "text",
     });
-    expect((search.content[0] as { text: string }).text).toContain(`${TARGET_GALLERY_ID}:100`);
+    expect((search.content[0] as { text: string }).text).toContain(`${TARGET_GALLERY_ID}:101`);
 
     const fetchResult = await client.callTool({
       name: "fetch",
-      arguments: { id: `${TARGET_GALLERY_ID}:100` },
+      arguments: { id: `${TARGET_GALLERY_ID}:101` },
     });
     expect((fetchResult.content[0] as { text: string }).text).toContain("Body text");
     expect((fetchResult.content[0] as { text: string }).text).toContain("Images");

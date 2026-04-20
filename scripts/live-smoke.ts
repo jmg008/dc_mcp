@@ -12,8 +12,12 @@ if (recent.length === 0) {
   throw new Error("No recent posts were returned from thesingularity.");
 }
 
-const search = await client.searchGallery("gpt");
-const post = await client.getPost(recent[0].postNo);
+const recommended = await client.listRecommended(1);
+if (recommended.length === 0) {
+  throw new Error("No recommended posts were returned from thesingularity.");
+}
+
+const post = await client.getPost(recommended[0].postNo);
 
 process.stdout.write(
   JSON.stringify(
@@ -23,11 +27,11 @@ process.stdout.write(
         id: recent[0].id,
         title: recent[0].title,
       },
-      searchCount: search.length,
-      firstSearch: search[0]
+      recommendedCount: recommended.length,
+      firstRecommended: recommended[0]
         ? {
-            id: search[0].id,
-            title: search[0].title,
+            id: recommended[0].id,
+            title: recommended[0].title,
           }
         : null,
       fetchedPost: {

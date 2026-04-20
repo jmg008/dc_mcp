@@ -23,7 +23,7 @@ This is intentional:
 So this server uses:
 
 - live list page parsing for recent posts
-- live mobile search result parsing for gallery-restricted search
+- live recommended-list parsing for concept posts
 - live view-page parsing for post metadata/body/images
 - live `/board/comment/` calls for comments
 
@@ -34,13 +34,14 @@ So this server uses:
 Input:
 
 ```json
-{ "query": "gpt" }
+{ "hours": 24 }
 ```
 
 Behavior:
 
-- empty or recent-like query returns recent posts
-- other queries use DCInside post search and keep only `thesingularity`
+- returns only recommended posts from `thesingularity`
+- filters them to the last N hours using `Asia/Seoul` time
+- defaults to `24` hours when omitted
 
 Result item fields:
 
@@ -125,7 +126,7 @@ npm run probe:deploy -- https://<your-service>.onrender.com/mcp
 Optional env overrides:
 
 - `MCP_ALLOWED_ORIGIN` defaults to `https://chat.openai.com`
-- `MCP_PROBE_QUERY` defaults to `gpt`
+- `MCP_PROBE_HOURS` defaults to `24`
 - `MCP_FETCH_ID` forces a specific `thesingularity:<postNo>` for fetch verification
 
 Optional live Vitest integration suite:

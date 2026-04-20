@@ -13,17 +13,17 @@ describeLive("live dcinside integration", () => {
   });
 
   it(
-    "returns only thesingularity posts for recent and search, then fetches one post with comments/images/url",
+    "returns only thesingularity recommended posts for the last 24 hours, then fetches one post with comments/images/url",
     async () => {
-      const recent = await client.listRecent(1);
-      expect(recent.length).toBeGreaterThan(0);
-      expect(recent.every((item) => item.galleryId === TARGET_GALLERY_ID)).toBe(true);
+      const recommended = await client.listRecommended(1);
+      expect(recommended.length).toBeGreaterThan(0);
+      expect(recommended.every((item) => item.galleryId === TARGET_GALLERY_ID)).toBe(true);
 
-      const search = await client.searchGallery("gpt");
-      expect(search.length).toBeGreaterThan(0);
-      expect(search.every((item) => item.galleryId === TARGET_GALLERY_ID)).toBe(true);
+      expect(
+        recommended.some((item) => typeof item.createdAt === "string" && item.createdAt.trim().length > 0),
+      ).toBe(true);
 
-      const post = await client.getPost(recent[0].postNo);
+      const post = await client.getPost(recommended[0].postNo);
       expect(post.galleryId).toBe(TARGET_GALLERY_ID);
       expect(post.url).toContain("gall.dcinside.com");
       expect(post.title.length).toBeGreaterThan(0);
