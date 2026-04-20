@@ -133,6 +133,22 @@ describe("http app", () => {
     await client.close();
   });
 
+  it("allows origin-less server-to-server MCP clients", async () => {
+    const transport = new StreamableHTTPClientTransport(new URL(`${baseUrl}/mcp`));
+    const client = new McpClient({
+      name: "originless-client",
+      version: "1.0.0",
+    });
+
+    await client.connect(transport);
+
+    const tools = await client.listTools();
+    expect(tools.tools.map((tool) => tool.name)).toEqual(["search", "fetch"]);
+
+    await transport.terminateSession();
+    await client.close();
+  });
+
   it("rejects disallowed origins", async () => {
     const response = await fetch(`${baseUrl}/mcp`, {
       method: "POST",

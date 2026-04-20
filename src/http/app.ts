@@ -61,8 +61,12 @@ export function createApp(options: AppOptions) {
       return next();
     }
 
-    const origin = req.header("origin");
-    if (!origin || !allowedOrigins.has(origin)) {
+    const origin = req.header("origin")?.trim();
+    if (!origin) {
+      return next();
+    }
+
+    if (!allowedOrigins.has(origin)) {
       return res.status(403).json({ error: "Origin is not allowed." });
     }
 
@@ -105,6 +109,7 @@ export function createApp(options: AppOptions) {
         requestId,
         method: req.method,
         path: req.path,
+        origin: req.header("origin") ?? null,
         sessionId: transport.sessionId ?? null,
         galleryId: TARGET_GALLERY_ID,
         postNo,
@@ -115,6 +120,7 @@ export function createApp(options: AppOptions) {
         requestId,
         method: req.method,
         path: req.path,
+        origin: req.header("origin") ?? null,
         galleryId: TARGET_GALLERY_ID,
         postNo,
         latencyMs: Date.now() - startedAt,

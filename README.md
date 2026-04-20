@@ -116,6 +116,18 @@ Live smoke check against DCInside:
 npm run smoke:live
 ```
 
+Public deployment probe:
+
+```bash
+npm run probe:deploy -- https://<your-service>.onrender.com/mcp
+```
+
+Optional env overrides:
+
+- `MCP_ALLOWED_ORIGIN` defaults to `https://chat.openai.com`
+- `MCP_PROBE_QUERY` defaults to `gpt`
+- `MCP_FETCH_ID` forces a specific `thesingularity:<postNo>` for fetch verification
+
 Optional live Vitest integration suite:
 
 - PowerShell: ``$env:RUN_LIVE_DC_TESTS='1'; npm test``
@@ -140,5 +152,6 @@ Suggested release order:
 2. Create a Render Blueprint from that repository.
 3. Set `ALLOWED_ORIGINS=https://chat.openai.com,https://chatgpt.com` during the initial Blueprint flow.
 4. Wait for `GET /healthz` to return `200`.
-5. Verify `POST /mcp` with MCP Inspector.
-6. Register `https://<your-service>.onrender.com/mcp` as a custom connector in ChatGPT.
+5. Run `npm run probe:deploy -- https://<your-service>.onrender.com/mcp`.
+6. Verify `POST /mcp` with MCP Inspector if you want an extra manual check.
+7. Register `https://<your-service>.onrender.com/mcp` as a custom connector in ChatGPT.
