@@ -1,0 +1,25 @@
+services:
+  - type: web
+    name: dcinside-mcp
+    runtime: docker
+    dockerfilePath: ./Dockerfile
+    dockerContext: .
+    plan: starter
+    region: singapore
+    autoDeployTrigger: commit
+    healthCheckPath: /healthz
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: HOST
+        value: 0.0.0.0
+      - key: REQUEST_TIMEOUT_MS
+        value: "15000"
+      - key: RECENT_CACHE_TTL_MS
+        value: "45000"
+      - key: POST_CACHE_TTL_MS
+        value: "180000"
+      - key: MAX_CONCURRENCY
+        value: "2"
+      - key: ALLOWED_ORIGINS
+        sync: false
