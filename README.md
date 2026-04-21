@@ -174,3 +174,5 @@ Vercel notes:
 - keep the project root at the repository root
 - set the same production env vars as Render, especially `ALLOWED_ORIGINS`
 - in stateless mode, `POST /mcp` works normally and `GET`/`DELETE /mcp` return `405`
+- this repo includes [vercel.json](/C:/Users/jmg008/Desktop/coding/mcp/dcmcp/vercel.json) to force the `express` framework preset and clear `buildCommand`/`outputDirectory` overrides
+- if the Vercel dashboard still shows `Build Command` or `Output Directory` overrides from an older import, clear them and redeploy
