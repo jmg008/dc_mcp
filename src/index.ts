@@ -6,6 +6,7 @@ dotenv.config();
 const port = parseNumber(process.env.PORT, 3000);
 const host = process.env.HOST?.trim() || "0.0.0.0";
 const isProduction = process.env.NODE_ENV === "production";
+const isVercel = process.env.VERCEL === "1";
 const allowedOrigins = (process.env.ALLOWED_ORIGINS ?? "")
   .split(",")
   .map((origin) => origin.trim())
@@ -17,14 +18,19 @@ const app = createApp({
   recentCacheTtlMs: parseNumber(process.env.RECENT_CACHE_TTL_MS, 45_000),
   postCacheTtlMs: parseNumber(process.env.POST_CACHE_TTL_MS, 180_000),
   maxConcurrency: parseNumber(process.env.MAX_CONCURRENCY, 2),
+  statelessMcp: isVercel || process.env.MCP_STATELESS === "1",
   requireAllowedOrigins: isProduction,
 });
 
-app.listen(port, host, () => {
-  process.stderr.write(
-    `[dcinside-mcp] listening on http://${host}:${port}/mcp (gallery: thesingularity)\n`,
-  );
-});
+export default app;
+
+if (!isVercel) {
+  app.listen(port, host, () => {
+    process.stderr.write(
+      `[dcinside-mcp] listening on http://${host}:${port}/mcp (gallery: thesingularity)\n`,
+    );
+  });
+}
 
 function parseNumber(value: string | undefined, fallback: number): number {
   if (!value) {

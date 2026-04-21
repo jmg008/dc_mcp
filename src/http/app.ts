@@ -14,6 +14,7 @@ export interface AppOptions {
   recentCacheTtlMs: number;
   postCacheTtlMs: number;
   maxConcurrency: number;
+  statelessMcp?: boolean;
   requireAllowedOrigins?: boolean;
   dcClient?: DcClient;
   logger?: (event: string, data?: Record<string, unknown>) => void;
@@ -29,6 +30,7 @@ type RequestWithId = Request & {
 
 export function createApp(options: AppOptions) {
   const app = express();
+  const statelessMcp = options.statelessMcp ?? false;
   const allowedOrigins = new Set(
     options.allowedOrigins.map((origin) => origin.trim()).filter((origin) => origin.length > 0),
   );
@@ -79,6 +81,31 @@ export function createApp(options: AppOptions) {
     const postNo = extractPostNoFromBody(req.body);
 
     try {
+      if (statelessMcp) {
+        await runStatelessMcpRequest({
+          req,
+          res,
+          log,
+          dcClient,
+          requestId,
+          postNo,
+          requestTimeoutMs: options.requestTimeoutMs,
+        });
+
+        log("request.success", {
+          requestId,
+          method: req.method,
+          path: req.path,
+          origin: req.header("origin") ?? null,
+          sessionId: null,
+          galleryId: TARGET_GALLERY_ID,
+          postNo,
+          latencyMs: Date.now() - startedAt,
+          transportMode: "stateless",
+        });
+        return;
+      }
+
       const transport = await resolveTransport({
         req,
         res,
@@ -114,6 +141,7 @@ export function createApp(options: AppOptions) {
         galleryId: TARGET_GALLERY_ID,
         postNo,
         latencyMs: Date.now() - startedAt,
+        transportMode: "stateful",
       });
     } catch (error) {
       log("request.error", {
@@ -124,6 +152,7 @@ export function createApp(options: AppOptions) {
         galleryId: TARGET_GALLERY_ID,
         postNo,
         latencyMs: Date.now() - startedAt,
+        transportMode: statelessMcp ? "stateless" : "stateful",
         error: error instanceof Error ? error.message : String(error),
       });
 
@@ -149,6 +178,70 @@ export function createApp(options: AppOptions) {
   });
 
   return app;
+}
+
+async function runStatelessMcpRequest(args: {
+  req: Request;
+  res: Response;
+  log: (event: string, data?: Record<string, unknown>) => void;
+  dcClient: DcClient;
+  requestId: string;
+  postNo: string | null;
+  requestTimeoutMs: number;
+}): Promise<void> {
+  const { req, res, log, dcClient, requestId, postNo, requestTimeoutMs } = args;
+
+  if (req.method !== "POST") {
+    res.status(405).json({
+      jsonrpc: "2.0",
+      error: {
+        code: -32000,
+        message: "Method not allowed.",
+      },
+      id: null,
+    });
+    return;
+  }
+
+  const server = createMcpServer({
+    dcClient,
+    logger: log,
+  });
+  const transport = new StreamableHTTPServerTransport({
+    sessionIdGenerator: undefined,
+  });
+
+  let closed = false;
+  const closeResources = () => {
+    if (closed) {
+      return;
+    }
+    closed = true;
+    void transport.close().catch(() => undefined);
+    void server.close().catch(() => undefined);
+  };
+
+  res.once("close", closeResources);
+
+  try {
+    await server.connect(transport);
+    await runWithRequestContext(
+      {
+        requestId,
+        galleryId: TARGET_GALLERY_ID,
+        postNo,
+      },
+      () =>
+        withTimeout(
+          () => transport.handleRequest(req, res, req.body),
+          requestTimeoutMs,
+          `MCP request timed out after ${requestTimeoutMs}ms.`,
+        ),
+    );
+  } catch (error) {
+    closeResources();
+    throw error;
+  }
 }
 
 function createLogger() {

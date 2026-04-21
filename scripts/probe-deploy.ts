@@ -54,7 +54,10 @@ async function verifyInvalidSession(url: URL): Promise<void> {
     },
   });
 
-  assert(response.status === 400, `Expected invalid session id to return 400, got ${response.status}.`);
+  assert(
+    response.status === 400 || response.status === 405,
+    `Expected invalid session id to return 400 (stateful) or 405 (stateless), got ${response.status}.`,
+  );
 }
 
 async function verifyMcpRoundTrip(url: URL): Promise<void> {

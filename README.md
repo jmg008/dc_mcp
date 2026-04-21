@@ -96,6 +96,7 @@ See [.env.example](C:/Users/jmg008/Desktop/coding/mcp/dcmcp/.env.example).
 Important:
 
 - `ALLOWED_ORIGINS` is required when `NODE_ENV=production`
+- `MCP_STATELESS=1` forces stateless MCP mode for serverless platforms or local Vercel-style testing
 - recommended first production allowlist is `https://chat.openai.com,https://chatgpt.com`
 - production defaults are:
   - `REQUEST_TIMEOUT_MS=15000`
@@ -128,6 +129,7 @@ Optional env overrides:
 - `MCP_ALLOWED_ORIGIN` defaults to `https://chat.openai.com`
 - `MCP_PROBE_HOURS` defaults to `24`
 - `MCP_FETCH_ID` forces a specific `thesingularity:<postNo>` for fetch verification
+- probe accepts both stateful invalid-session `400` and stateless `405`
 
 Optional live Vitest integration suite:
 
@@ -156,3 +158,19 @@ Suggested release order:
 5. Run `npm run probe:deploy -- https://<your-service>.onrender.com/mcp`.
 6. Verify `POST /mcp` with MCP Inspector if you want an extra manual check.
 7. Register `https://<your-service>.onrender.com/mcp` as a custom connector in ChatGPT.
+
+## Vercel deployment
+
+This repo can also run on Vercel without a Docker layer.
+
+Behavior:
+
+- `src/index.ts` now exports the Express app as a default export for Vercel
+- when `VERCEL=1`, the server switches to stateless MCP mode automatically
+- you can simulate the same behavior locally with `MCP_STATELESS=1`
+
+Vercel notes:
+
+- keep the project root at the repository root
+- set the same production env vars as Render, especially `ALLOWED_ORIGINS`
+- in stateless mode, `POST /mcp` works normally and `GET`/`DELETE /mcp` return `405`

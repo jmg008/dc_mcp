@@ -7,6 +7,44 @@ import { createApp } from "../src/http/app.js";
 import type { DcClient } from "../src/dc/client.js";
 import { TARGET_GALLERY_ID } from "../src/types/dc.js";
 
+async function listenApp(options?: { statelessMcp?: boolean; allowedOrigins?: string[] }) {
+  const app = createApp({
+    allowedOrigins: options?.allowedOrigins ?? ["https://chat.openai.com"],
+    requestTimeoutMs: 15_000,
+    recentCacheTtlMs: 45_000,
+    postCacheTtlMs: 180_000,
+    maxConcurrency: 2,
+    statelessMcp: options?.statelessMcp,
+    dcClient: makeClient(),
+    logger: () => undefined,
+  });
+
+  const server = await new Promise<HttpServer>((resolve) => {
+    const instance = app.listen(0, "127.0.0.1", () => resolve(instance));
+  });
+  const address = server.address() as AddressInfo;
+  return {
+    server,
+    baseUrl: `http://127.0.0.1:${address.port}`,
+  };
+}
+
+async function closeServer(server: HttpServer | undefined): Promise<void> {
+  if (!server) {
+    return;
+  }
+
+  await new Promise<void>((resolve, reject) => {
+    server.close((error) => {
+      if (error) {
+        reject(error);
+        return;
+      }
+      resolve();
+    });
+  });
+}
+
 function makeClient(): DcClient {
   return {
     listRecent: vi.fn(async () => [
@@ -55,35 +93,13 @@ describe("http app", () => {
   let baseUrl = "";
 
   beforeEach(async () => {
-    const app = createApp({
-      allowedOrigins: ["https://chat.openai.com"],
-      requestTimeoutMs: 15_000,
-      recentCacheTtlMs: 45_000,
-      postCacheTtlMs: 180_000,
-      maxConcurrency: 2,
-      dcClient: makeClient(),
-      logger: () => undefined,
-    });
-
-    server = await new Promise<HttpServer>((resolve) => {
-      const instance = app.listen(0, "127.0.0.1", () => resolve(instance));
-    });
-    const address = server.address() as AddressInfo;
-    baseUrl = `http://127.0.0.1:${address.port}`;
+    const started = await listenApp();
+    server = started.server;
+    baseUrl = started.baseUrl;
   });
 
   afterEach(async () => {
-    if (server) {
-      await new Promise<void>((resolve, reject) => {
-        server?.close((error) => {
-          if (error) {
-            reject(error);
-            return;
-          }
-          resolve();
-        });
-      });
-    }
+    await closeServer(server);
     server = undefined;
   });
 
@@ -182,5 +198,46 @@ describe("http app", () => {
     await expect(response.json()).resolves.toMatchObject({
       error: expect.stringContaining("Unknown MCP session id"),
     });
+  });
+
+  it("round-trips search and fetch in stateless MCP mode", async () => {
+    const stateless = await listenApp({ statelessMcp: true });
+    const transport = new StreamableHTTPClientTransport(new URL(`${stateless.baseUrl}/mcp`), {
+      requestInit: {
+        headers: {
+          Origin: "https://chat.openai.com",
+        },
+      },
+    });
+    const client = new McpClient({
+      name: "stateless-client",
+      version: "1.0.0",
+    });
+
+    try {
+      await client.connect(transport);
+
+      const tools = await client.listTools();
+      expect(tools.tools.map((tool) => tool.name)).toEqual(["search", "fetch"]);
+
+      const search = await client.callTool({
+        name: "search",
+        arguments: { hours: 24 },
+      });
+      expect(search.isError).toBeFalsy();
+      expect((search.content[0] as { text: string }).text).toContain(`${TARGET_GALLERY_ID}:101`);
+
+      const getResponse = await fetch(`${stateless.baseUrl}/mcp`, {
+        method: "GET",
+        headers: {
+          Origin: "https://chat.openai.com",
+        },
+      });
+      expect(getResponse.status).toBe(405);
+    } finally {
+      await transport.terminateSession().catch(() => undefined);
+      await client.close().catch(() => undefined);
+      await closeServer(stateless.server);
+    }
   });
 });
