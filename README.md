@@ -165,7 +165,8 @@ This repo can also run on Vercel without a Docker layer.
 
 Behavior:
 
-- `src/index.ts` now exports the Express app as a default export for Vercel
+- `src/app.ts` is the Vercel-facing Express entrypoint and directly imports `express`
+- `src/index.ts` still starts the local Node server for Render and local development
 - when `VERCEL=1`, the server switches to stateless MCP mode automatically
 - you can simulate the same behavior locally with `MCP_STATELESS=1`
 
